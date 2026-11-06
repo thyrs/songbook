@@ -29,11 +29,11 @@
 </head>
 <body>
 
-  <h1 id="song-title">Loading...</h1>
+  <h4 id="song-title">Loading...</h4>
   <button id="btn-chords" class="active">🎸 With Chords</button>
   <button id="btn-lyrics">📖 Lyrics Only</button>
   <div id="debug"></div>
-  <div id="song"></div>
+  <div id="song" ></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chordsheetjs@10.0.0/lib/bundle.min.js"></script>
   <script>
@@ -151,7 +151,7 @@
   return out.join('\n');
 }
 
-    fetch('034_en_momentos_asi.xml')
+    fetch('bob.xml')
       .then(res => {
         if (!res.ok) throw new Error('File not found: ' + res.status);
         return res.text();
