@@ -35,3 +35,14 @@
       document.getElementById('song').innerHTML = formatter.format(song);
     });
 </script>
+
+<div id="debug" style="background:yellow; padding:20px; font-family:monospace;"></div>
+<div id="song"></div>
+
+<script>
+  // This catches ANY error and shows it on screen
+  window.onerror = function(msg, url, line) {
+    document.getElementById('debug').innerHTML = 
+      "ERROR: " + msg + "<br>Line: " + line;
+  };
+</script>
