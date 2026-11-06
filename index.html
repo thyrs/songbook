@@ -1,0 +1,37 @@
+<script src="https://cdn.jsdelivr.net/npm/chordsheetjs@10.0.0/dist/chordsheetjs.min.js"></script>
+<script>
+  fetch('amazing-grace.xml')
+    .then(res => res.text())
+    .then(xmlText => {
+      
+      // STEP 1: PARSE XML (browser does this for free)
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+
+      // STEP 2: EXTRACT FIELDS
+      const title = xmlDoc.querySelector("title")?.textContent || "";
+      const author = xmlDoc.querySelector("author")?.textContent || "";
+      const key = xmlDoc.querySelector("key")?.textContent || "";
+      const presentation = xmlDoc.querySelector("presentation")?.textContent || "";
+      const lyrics = xmlDoc.querySelector("lyrics")?.textContent || "";
+
+      // STEP 3: CONVERT OpenSong XML -> ChordPro string
+      // This is the magic bridge
+      let chordProText = `{title: ${title}}\n`;
+      chordProText += `{artist: ${author}}\n`;
+      chordProText += `{key: ${key}}\n`;
+      if (presentation) chordProText += `{comment: Presentation: ${presentation}}\n\n`;
+      chordProText += lyrics;
+
+      // lyrics already looks like:
+      // [V1]
+      // [G]Amazing grace...
+
+      // STEP 4: NOW USE ChordSheetJS LIKE BEFORE
+      const chordProParser = new ChordSheetJS.ChordProParser();
+      const song = chordProParser.parse(chordProText);
+
+      const formatter = new ChordSheetJS.HtmlDivFormatter();
+      document.getElementById('song').innerHTML = formatter.format(song);
+    });
+</script>
