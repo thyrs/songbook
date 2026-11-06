@@ -1,48 +1,193 @@
-<script src="https://cdn.jsdelivr.net/npm/chordsheetjs@10.0.0/dist/chordsheetjs.min.js"></script>
-<script>
-  fetch('amazing-grace.xml')
-    .then(res => res.text())
-    .then(xmlText => {
-      
-      // STEP 1: PARSE XML (browser does this for free)
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Songs</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .chord { color: #e74c3c; font-weight: bold; }
+    .paragraph { margin-bottom: 20px; }
+    #debug { background: #fff3cd; padding: 15px; display: none; white-space: pre-wrap; }
+    button { padding: 10px 15px; margin-right: 8px; font-size: 16px; cursor: pointer; }
+    button.active { background: #222; color: white; }
+    /* Stop ChordSheetJS from wrapping each word to a new line */
+#song .row {
+  display: flex;
+  flex-wrap: nowrap !important;
+  white-space: nowrap;
+}
+#song .column {
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+#song .paragraph {
+  margin-bottom: 20px;
+  overflow-x: auto; /* scroll sideways on small phones instead of breaking */
+}
+  </style>
+</head>
+<body>
 
-      // STEP 2: EXTRACT FIELDS
-      const title = xmlDoc.querySelector("title")?.textContent || "";
-      const author = xmlDoc.querySelector("author")?.textContent || "";
-      const key = xmlDoc.querySelector("key")?.textContent || "";
-      const presentation = xmlDoc.querySelector("presentation")?.textContent || "";
-      const lyrics = xmlDoc.querySelector("lyrics")?.textContent || "";
+  <h1 id="song-title">Loading...</h1>
+  <button id="btn-chords" class="active">🎸 With Chords</button>
+  <button id="btn-lyrics">📖 Lyrics Only</button>
+  <div id="debug"></div>
+  <div id="song"></div>
 
-      // STEP 3: CONVERT OpenSong XML -> ChordPro string
-      // This is the magic bridge
-      let chordProText = `{title: ${title}}\n`;
-      chordProText += `{artist: ${author}}\n`;
-      chordProText += `{key: ${key}}\n`;
-      if (presentation) chordProText += `{comment: Presentation: ${presentation}}\n\n`;
-      chordProText += lyrics;
+  <script src="https://cdn.jsdelivr.net/npm/chordsheetjs@10.0.0/lib/bundle.min.js"></script>
+  <script>
+    let savedSong = null;
+    let savedChordsHtml = "";
 
-      // lyrics already looks like:
-      // [V1]
-      // [G]Amazing grace...
+    function showError(msg) {
+      const el = document.getElementById('debug');
+      el.style.display = 'block';
+      el.textContent = 'ERROR: ' + msg;
+    }
 
-      // STEP 4: NOW USE ChordSheetJS LIKE BEFORE
-      const chordProParser = new ChordSheetJS.ChordProParser();
-      const song = chordProParser.parse(chordProText);
+    function renderWithChords() {
+      if (!savedSong) return;
+      document.getElementById('song').innerHTML = savedChordsHtml;
+      document.getElementById('btn-chords').classList.add('active');
+      document.getElementById('btn-lyrics').classList.remove('active');
+    }
 
-      const formatter = new ChordSheetJS.HtmlDivFormatter();
-      document.getElementById('song').innerHTML = formatter.format(song);
-    });
-</script>
+    function renderLyricsOnly() {
+      if (!savedSong) return;
+      // Take the chords HTML, make a copy, delete all chord elements
+      const temp = document.createElement('div');
+      temp.innerHTML = savedChordsHtml;
+      // This is the robust part - delete ANY element with 'chord' in its class
+      temp.querySelectorAll('[class*="chord"]').forEach(el => {
+        // Don't delete the outer container
+        if (el.className === 'chord-sheet') return;
+        // If it IS a chord element, remove it
+        if (el.className.includes('chord')) {
+          // Only remove if it doesn't contain lyrics inside
+          if (!el.querySelector('.lyrics') && !el.querySelector('[class*="lyrics"]')) {
+            el.remove();
+          }
+        }
+      });
+      // Also specifically remove .chord divs
+      temp.querySelectorAll('.chord').forEach(el => el.remove());
 
-<div id="debug" style="background:yellow; padding:20px; font-family:monospace;"></div>
-<div id="song"></div>
+      document.getElementById('song').innerHTML = temp.innerHTML;
+      document.getElementById('btn-lyrics').classList.add('active');
+      document.getElementById('btn-chords').classList.remove('active');
+    }
 
-<script>
-  // This catches ANY error and shows it on screen
-  window.onerror = function(msg, url, line) {
-    document.getElementById('debug').innerHTML = 
-      "ERROR: " + msg + "<br>Line: " + line;
-  };
-</script>
+    // Buttons - attached immediately, at the top, before fetch
+    document.getElementById('btn-lyrics').addEventListener('click', renderLyricsOnly);
+    document.getElementById('btn-chords').addEventListener('click', renderWithChords);
+    function convertOpenSongToChordPro(lyrics) {
+  const lines = lyrics.split('\n');
+  let out = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    let line = lines[i];
+
+    if (/^\[V1\]/.test(line)) { out.push('{start_of_verse: Verse 1}'); i++; continue; }
+    if (/^\[V2\]/.test(line)) { out.push('{start_of_verse: Verse 2}'); i++; continue; }
+    if (/^\[V3\]/.test(line)) { out.push('{start_of_verse: Verse 3}'); i++; continue; }
+    if (/^\[V4\]/.test(line)) { out.push('{start_of_verse: Verse 4}'); i++; continue; }
+    if (/^\[C\]/.test(line)) { out.push('{start_of_chorus: Chorus}'); i++; continue; }
+    if (/^\[B\]/.test(line)) { out.push('{start_of_bridge: Bridge}'); i++; continue; }
+    if (/^\[P\]/.test(line)) { out.push('{start_of_verse: Pre-Chorus}'); i++; continue; }
+
+    if (line.startsWith('.')) {
+      let chordLine = line.slice(1);
+      if (/Tono|Ritmo|Tempo/i.test(chordLine)) {
+        out.push(`{comment: ${chordLine.trim()}}`);
+        i++; continue;
+      }
+
+      let j = i + 1;
+      while (j < lines.length && lines[j].trim() === '') j++;
+      let lyricLine = (j < lines.length) ? lines[j] : '';
+      if (lyricLine.startsWith('.') || lyricLine.startsWith('[')) { i++; continue; }
+
+      // 1. Get chords in order
+      const chordRegex = /[A-G][#b]?(?:m|maj|min|dim|aug|sus\d?|add\d?)?(?:\/[A-G][#b]?)?/g;
+      let chords = [...chordLine.matchAll(chordRegex)].map(m => m[0]);
+
+      // 2. Get words in lyric line + where each word starts
+      // \S+ = a chunk of non-spaces = a word
+      let words = [...lyricLine.matchAll(/\S+/g)];
+
+      // 3. Map: chord 0 -> word 0 start, chord 1 -> word 1 start, etc.
+      // If more chords than words, extra chords go on last word
+      let inserts = {}; // lyricIndex -> "[D][G]"
+      chords.forEach((chord, idx) => {
+        let wordIdx = Math.min(idx, words.length - 1);
+        if (words.length === 0) {
+          // No words, just put chords at start
+          inserts[0] = (inserts[0] || '') + `[${chord}]`;
+        } else {
+          let pos = words[wordIdx].index;
+          inserts[pos] = (inserts[pos] || '') + `[${chord}]`;
+        }
+      });
+
+      // 4. Build the line, never splitting a word
+      let result = '';
+      for (let k = 0; k < lyricLine.length; k++) {
+        if (inserts[k]) result += inserts[k];
+        result += lyricLine[k];
+      }
+      // Chords after end
+      if (inserts[lyricLine.length]) result += inserts[lyricLine.length];
+
+      out.push(result);
+      i = j + 1;
+      continue;
+    }
+
+    out.push(line);
+    i++;
+  }
+  return out.join('\n');
+}
+
+    fetch('034_en_momentos_asi.xml')
+      .then(res => {
+        if (!res.ok) throw new Error('File not found: ' + res.status);
+        return res.text();
+      })
+      .then(xmlText => {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+        if (xmlDoc.querySelector('parsererror')) {
+          throw new Error('XML is broken. Probably has a & character.');
+        }
+
+        const title = xmlDoc.querySelector("title")?.textContent || "";
+        const author = xmlDoc.querySelector("author")?.textContent || "";
+        const key = xmlDoc.querySelector("key")?.textContent || "";
+        let lyrics = xmlDoc.querySelector("lyrics")?.textContent || "";
+
+        lyrics = convertOpenSongToChordPro(lyrics);
+
+        let chordProText = `{title: ${title}}\n`;
+        chordProText += `{artist: ${author}}\n`;
+        chordProText += `{key: ${key}}\n\n`;
+        chordProText += lyrics;
+
+        const chordProParser = new ChordSheetJS.ChordProParser();
+        savedSong = chordProParser.parse(chordProText);
+
+        const formatter = new ChordSheetJS.HtmlDivFormatter();
+        savedChordsHtml = formatter.format(savedSong);
+
+        document.getElementById('song').innerHTML = savedChordsHtml;
+        document.getElementById('song-title').textContent = title;
+      })
+      .catch(err => {
+        console.error(err);
+        showError(err.message);
+      });
+  </script>
+</body>
+</html>
